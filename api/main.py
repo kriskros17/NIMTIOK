@@ -1,64 +1,79 @@
+# main.py - nasze API. Teraz dane biorą się z bazy, a nie z plików CSV.
 
-import csv
 from fastapi import FastAPI
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+from models import Movie, Link, Rating, Tag
+
+# połączenie z tą samą bazą, którą zapełnił load_data.py
+engine = create_engine("sqlite:///database/movies.db")
 
 app = FastAPI()
 
-
-class Movie:
-    def __init__(self, movie_id: int, title: str, genres: list):
-        self.movie_id = movie_id
-        self.title = title
-        self.genres = genres
-
-class Link:
-    def __init__(self, movie_id: int, imdb_id: str, tmdb_id: str):
-        self.movie_id = movie_id
-        self.imdb_id = imdb_id
-        self.tmdb_id = tmdb_id
-
-class Rating:
-    def __init__(self, user_id: int, movie_id: int, rating: float, timestamp: int):
-        self.user_id = user_id
-        self.movie_id = movie_id
-        self.rating = rating
-        self.timestamp = timestamp
-
-class Tag:
-    def __init__(self, user_id: int, movie_id: int, tag: str, timestamp: int):
-        self.user_id = user_id
-        self.movie_id = movie_id
-        self.tag = tag
-        self.timestamp = timestamp
-
-def read_rows(filename: str):
-    rows = []
-    with open(filename, encoding="utf-8") as file:
-        reader = csv.reader(file)
-        next(reader)  # Skip the header row
-        return list(reader)
 
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
 
-@app.get("/links")
-def get_links():
-    links = [Link(movie_id=int(row[0]), imdb_id=row[1], tmdb_id=row[2]) for row in read_rows("database/links.csv")]
-    return [link.__dict__ for link in links]
-
-@app.get("/ratings")
-def get_ratings():
-    ratings = [Rating(user_id=int(row[0]), movie_id=int(row[1]), rating=float(row[2]), timestamp=int(row[3])) for row in read_rows("database/ratings.csv")]
-    return [rating.__dict__ for rating in ratings]
 
 @app.get("/movies")
 def get_movies():
-    movies = [Movie(movie_id=int(row[0]), title=row[1], genres=row[2].split("|")) for row in read_rows("database/movies.csv")]
-    return [movie.__dict__ for movie in movies]
+    with Session(engine) as session:
+        # "daj mi wszystkie filmy z bazy"
+        movies = session.scalars(select(Movie)).all()
+
+    result = []
+    for movie in movies:
+        result.append({
+            "movie_id": movie.movie_id,
+            "title": movie.title,
+            "genres": movie.genres.split("|"),  # tekst zamieniamy z powrotem na listę
+        })
+    return result
+
+
+@app.get("/links")
+def get_links():
+    with Session(engine) as session:
+        links = session.scalars(select(Link)).all()
+
+    result = []
+    for link in links:
+        result.append({
+            "movie_id": link.movie_id,
+            "imdb_id": link.imdb_id,
+            "tmdb_id": link.tmdb_id,
+        })
+    return result
+
+
+@app.get("/ratings")
+def get_ratings():
+    with Session(engine) as session:
+        ratings = session.scalars(select(Rating)).all()
+
+    result = []
+    for rating in ratings:
+        result.append({
+            "user_id": rating.user_id,
+            "movie_id": rating.movie_id,
+            "rating": rating.rating,
+            "timestamp": rating.timestamp,
+        })
+    return result
 
 
 @app.get("/tags")
 def get_tags():
-    tags = [Tag(user_id=int(row[0]), movie_id=int(row[1]), tag=row[2], timestamp=int(row[3])) for row in read_rows("database/tags.csv")]
-    return [tag.__dict__ for tag in tags]
+    with Session(engine) as session:
+        tags = session.scalars(select(Tag)).all()
+
+    result = []
+    for tag in tags:
+        result.append({
+            "user_id": tag.user_id,
+            "movie_id": tag.movie_id,
+            "tag": tag.tag,
+            "timestamp": tag.timestamp,
+        })
+    return result
